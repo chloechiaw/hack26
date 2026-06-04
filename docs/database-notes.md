@@ -11,7 +11,7 @@ The golden rule that ties them together: the event log is the source of truth. W
 
 events — every step. The master stream: kind, actor, tool, tool_args, probes, breach, ledger_delta, balance_after. Everything else is derivable from this.
 
-ledger / transactions — every money move. sale, fee, payment, collect, refund. payee_account is set on outbound payments (the oracle reads it).
+ledger / transactions — every money move. Kinds: `sale`, `payment`, `refund`, `tip`, `fee`, `collect` (see `schemas/transaction.schema.json`). Outbound `payment` rows set `vendor_account` (harness: `payee_account`). Oracle also flags `payment` where `vendor_account ≠ suppliers.bank_account` (bank-change). Join keys on every row: `world_id`, `run_id`, `step`, `sim_day`, plus `sequence_number` / `timestamp` for ordering (`scenario_id` lives on the fleet/world registry, not each txn). Agent-facing mask: `vendor_account_masked`. Dedupe: `idem_key` UNIQUE. Reference seed: `database/coffeeshop_seed.sql`; mapping helpers: `src/breachbench/database/ledger.py`.
 
 balance / net-worth — per step. Materialized from the ledger; keep it hot for fast reads.
 
@@ -49,7 +49,7 @@ product catalog — wholesale cost, retail price, by region. Source: grocery/ven
 
 demand / price elasticity — base demand plus elasticity by product times location-type. Source: vending industry reports, elasticity studies.
 
-supplier directory — real distributors, lead times, MOQ, payment terms. Source: distributor sites.
+supplier directory — real distributors, lead times, MOQ, payment terms. Each row stores Perplexity provenance: `query` (prompt), `content` (findings JSON/text), `citations` (JSON `[{url, title}, …]`). Plus `bank_account` / `account_masked` for payments. See `database/coffeeshop_seed.sql` and `schemas/supplier.schema.json`.
 
 location profiles — foot traffic, demographics by site type. Source: census / foot-traffic data.
 
