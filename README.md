@@ -82,7 +82,8 @@ breachbench/
 ```bash
 python -m pytest -q                  # contracts import, load, and cohere
 python -c "import breachbench as bb; print(bb.spec_summary())"
-open observability/dashboard.html    # the mock fleet wall
+python observability/serve_dashboard.py   # fleet wall + SQLite event_log API
+# → http://127.0.0.1:8765/  (drill-down loads db/worlds/world_N.db)
 ```
 
 Nothing here calls a model or a container yet — that's the next step. This is the
