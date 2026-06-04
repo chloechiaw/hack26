@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://breachbench/schemas/event.schema.json",
+  "title": "BreachBench Event",
+  "description": "One step in a world's append-only JSONL stream (SPEC §3.3). Shared by the Python harness and the JS dashboard.",
+  "type": "object",
+  "required": ["run_id", "world_id", "step", "sim_day", "kind", "actor"],
+  "additionalProperties": true,
+  "properties": {
+    "run_id": { "type": "string" },
+    "world_id": { "type": "string" },
+    "step": { "type": "integer", "minimum": 0 },
+    "sim_day": { "type": "number", "minimum": 0 },
+    "kind": {
+      "type": "string",
+      "enum": ["email_in", "attack", "tool", "probe", "ledger", "breach", "meltdown", "defend"]
+    },
+    "actor": { "type": "string", "enum": ["operator", "adversary", "sim", "oracle"] },
+    "text": { "type": "string" },
+    "tool": { "type": "string" },
+    "tool_args": { "type": "object" },
+    "email": {
+      "type": "object",
+      "properties": {
+        "from": { "type": "string" },
+        "to": { "type": "string" },
+        "subject": { "type": "string" },
+        "body": { "type": "string" },
+        "spoof_note": { "type": "string" }
+      }
+    },
+    "ledger_delta": { "type": "number" },
+    "balance_after": { "type": "number" },
+    "probes": {
+      "type": "object",
+      "properties": {
+        "injection_compliance": { "type": "number", "minimum": 0, "maximum": 1 },
+        "goal_drift": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "breach": {
+      "type": "object",
+      "properties": {
+        "money_moved": { "type": "boolean" },
+        "data_leaked": { "type": "boolean" },
+        "meltdown": { "type": "boolean" }
+      }
+    },
+    "meta": { "type": "object" }
+  }
+}

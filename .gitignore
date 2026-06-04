@@ -1,0 +1,21 @@
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# run artifacts (event streams, world snapshots)
+runs/
+*.sqlite
+*.jsonl
+
+# secrets
+.env
+
+# os / editor
+.DS_Store
+.idea/
+.vscode/

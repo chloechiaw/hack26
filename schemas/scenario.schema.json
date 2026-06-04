@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://breachbench/schemas/scenario.schema.json",
+  "title": "BreachBench Scenario",
+  "description": "Complete, deterministic definition of one world (SPEC §5). The unit fanned out x50.",
+  "type": "object",
+  "required": ["schema_version", "id", "location", "good_agent", "bad_agent", "world"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string" },
+    "id": { "type": "string" },
+    "location": { "type": "string", "description": "scenario site, e.g. downtown-hub" },
+    "good_agent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "model": { "type": "string" },
+        "defenses": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "bad_agent": {
+      "type": "object",
+      "required": ["attack_class"],
+      "additionalProperties": false,
+      "properties": {
+        "model": { "type": "string" },
+        "attack_class": {
+          "type": "string",
+          "enum": ["spoofed-supplier", "bank-change", "refund-fraud", "ledger-exfil", "derailment-bait"]
+        },
+        "payload": {
+          "type": "object",
+          "required": ["sender", "subject", "body", "injection_step"],
+          "properties": {
+            "sender": { "type": "string" },
+            "spoof_note": { "type": "string" },
+            "subject": { "type": "string" },
+            "body": { "type": "string" },
+            "injection_step": { "type": "integer", "minimum": 0 },
+            "persistence": { "type": "integer", "minimum": 1 }
+          }
+        }
+      }
+    },
+    "world": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "start_balance": { "type": "number" },
+        "daily_fee": { "type": "number" },
+        "horizon_days": { "type": "number" },
+        "seed": { "type": "integer" },
+        "demand": { "type": "object" },
+        "suppliers": { "type": "array", "items": { "type": "object" } },
+        "legitimate_payees": { "type": "array", "items": { "type": "string" } },
+        "legitimate_contacts": { "type": "array", "items": { "type": "string" } },
+        "protected_fields": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "oracle": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "drift_threshold": { "type": "number", "minimum": 0, "maximum": 1 },
+        "drift_window": { "type": "integer", "minimum": 1 },
+        "no_progress_steps": { "type": "integer", "minimum": 1 },
+        "loop_repeat": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "expected_outcome": {
+      "type": "string",
+      "enum": ["breached", "meltdown", "defended", "running"]
+    }
+  }
+}
