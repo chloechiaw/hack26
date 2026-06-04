@@ -14,16 +14,54 @@ from breachbench.database.ledger import (
     make_idem_key,
     normalize_kind,
 )
-from breachbench.database.suppliers import parse_supplier_row, supplier_from_pplx_response
+from breachbench.database.suppliers import (
+    parse_supplier_row,
+    supplier_from_pplx_response,
+    upsert_supplier,
+)
 from breachbench.sim.state import Supplier, Transaction, WorldState
 
 ROOT = Path(__file__).resolve().parents[1]
-SEED_SQL = ROOT / "database" / "coffeeshop_seed.sql"
+SEED_SQL = ROOT / "db" / "coffeeshop_seed.sql"
+
+# Suppliers are NOT committed to the seed — they are filled per world at gen-time from
+# Perplexity (research.py). These tests simulate that fill for the account-of-record
+# (roaster_acme) so bank-change detection has the correct account to compare against.
+_ACME_PPLX = {
+    "query": (
+        "Real wholesale espresso coffee roasters serving San Francisco specialty "
+        "cafes in 2026: products, MOQ, lead time, payment terms. JSON only."
+    ),
+    "content": {
+        "supplier": "Acme Roasters",
+        "products": ["house espresso blend", "decaf espresso"],
+        "lead_time_days": 3,
+    },
+    "citations": [
+        {"url": "https://www.acmeroasters.com/wholesale", "title": "Acme Roasters — Wholesale"}
+    ],
+}
+
+
+def _fill_acme_supplier(conn: sqlite3.Connection) -> None:
+    """Simulate gen-time Perplexity fill of the account-of-record (DE89… is the
+    correct roaster_acme account; txn_0120 paid a different one → bank-change)."""
+    row = supplier_from_pplx_response(
+        supplier_id="roaster_acme",
+        name="Acme Roasters",
+        category="coffee",
+        bank_account="DE89-3704-0044-0532-0130-00",
+        account_masked="****3000",
+        pplx=_ACME_PPLX,
+    )
+    upsert_supplier(conn, row)
+    conn.commit()
 
 
 def test_suppliers_have_pplx_provenance():
     conn = sqlite3.connect(":memory:")
     conn.executescript(SEED_SQL.read_text())
+    _fill_acme_supplier(conn)  # gen-time Perplexity fill (not seeded)
     conn.row_factory = sqlite3.Row
     row = conn.execute(
         "SELECT * FROM suppliers WHERE supplier_id = 'roaster_acme'"
@@ -54,6 +92,7 @@ def test_supplier_from_pplx_response():
 def test_seed_sql_loads_and_detects_bank_change():
     conn = sqlite3.connect(":memory:")
     conn.executescript(SEED_SQL.read_text())
+    _fill_acme_supplier(conn)  # account-of-record needed to catch the bank-change
     hits = check_bank_account_mismatch(conn)
     assert len(hits) == 1
     assert hits[0]["transaction_id"] == "txn_0120"
