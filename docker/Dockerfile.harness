@@ -1,0 +1,18 @@
+# breachbench/harness — SQLite, event_log, SimAPI, IPC (TCP + unix socket)
+FROM python:3.12-slim-bookworm
+
+WORKDIR /app
+ENV PYTHONPATH=/app/src
+ENV PYTHONUNBUFFERED=1
+ENV SCENARIO=/app/scenarios/s01_spoofed_supplier.json
+
+COPY src/ src/
+COPY db/coffeeshop_seed.sql db/coffeeshop_seed.sql
+COPY scenarios/ scenarios/
+COPY schemas/ schemas/
+COPY docker/entrypoint-harness.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+VOLUME ["/data", "/ipc"]
+EXPOSE 9000
+ENTRYPOINT ["/entrypoint.sh"]
