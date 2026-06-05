@@ -45,6 +45,7 @@ class VendingSim(SimAPI):
         self.scenario = scenario
         self.research = research          # optional research.Perplexity provider
         self.provenance = "hardcoded-defaults"
+        self._experiment = getattr(scenario, "experiment", None) or {}
         w = scenario.world
         self.rng = random.Random(w.seed)
         self.world = WorldState(world_id=scenario.id, seed=w.seed,
@@ -181,7 +182,28 @@ class VendingSim(SimAPI):
                           ledger_delta=amt, data={"collected": amt})
 
     # ---- supply / inventory ----------------------------------------------
-    def search_for_suppliers(self, query: str) -> ToolResult:
+    def _supplier_experiment_active(self) -> bool:
+        return self._experiment.get("mode") == "supplier_injection"
+
+    def search_for_suppliers(self, query: str, *, contain: bool | None = None) -> ToolResult:
+        """Wholesaler search. Experiment worlds use a deterministic ranked-results fixture."""
+        if self._supplier_experiment_active():
+            from ..experiments.supplier_injection import fixture_search_results
+
+            channel = self._experiment.get("channel", "email")
+            use_contain = self._experiment.get("contain", False) if contain is None else contain
+            payload = ""
+            if channel == "tool_result":
+                payload = self._experiment.get("payload_text", "")
+            results = fixture_search_results(
+                query, payload_text=payload, contain=use_contain,
+            )
+            return ToolResult(
+                True,
+                f"{len(results)} suppliers found.",
+                data={"results": results, "fixture": True, "channel": channel, "contain": use_contain},
+            )
+
         sups = [{"supplier_id": s.supplier_id, "name": s.name, "products": s.products,
                  "unit_prices": s.unit_prices, "lead_time_days": s.lead_time_days,
                  "payment_account": s.payment_account}

@@ -15,11 +15,26 @@ import os
 import subprocess
 import sys
 
+import itertools
+
 from .episode import Episode, make_manifest
 from .events.schema import EventKind, JsonlEmitter
+from .experiments.supplier_injection import CHANNELS, DEFENSE_ARMS, build
 from .scenario import Scenario
 
 _DEFAULT = "scenarios/s01_spoofed_supplier.json"
+
+
+def _apply_supplier_experiment(scen: Scenario, *, channel: str, contain: bool) -> Scenario:
+    payload = scen.bad_agent.payload.body if scen.bad_agent.payload else ""
+    inj = build(channel=channel, contain=contain, payload_text=payload)
+    scen.experiment = {
+        "mode": "supplier_injection",
+        "channel": inj.channel,
+        "contain": inj.contain,
+        "payload_text": inj.payload_text,
+    }
+    return scen
 
 
 def main(argv=None) -> int:
@@ -28,7 +43,15 @@ def main(argv=None) -> int:
     ap.add_argument("--out", default="runs", help="output dir (default: runs/)")
     ap.add_argument("--no-open", action="store_true", help="don't open the PNG when done")
     ap.add_argument("--no-viz", action="store_true", help="skip the graph (JSONL + summary only)")
+    ap.add_argument(
+        "--supplier-matrix",
+        action="store_true",
+        help="run attack × channel × contain cells (supplier-injection experiment)",
+    )
     args = ap.parse_args(argv)
+
+    if args.supplier_matrix:
+        return _run_supplier_matrix(args)
 
     scen = Scenario.load(args.scenario)
     os.makedirs(args.out, exist_ok=True)
@@ -53,6 +76,26 @@ def main(argv=None) -> int:
         except ImportError:
             print("\n  (matplotlib not installed — `pip install matplotlib` for graphs; "
                   "JSONL written.)")
+    return 0
+
+
+def _run_supplier_matrix(args) -> int:
+    """Run attack_class × channel × defense_arm for one scenario (local matrix smoke)."""
+    base = Scenario.load(args.scenario)
+    os.makedirs(args.out, exist_ok=True)
+    for channel, contain in itertools.product(CHANNELS, DEFENSE_ARMS):
+        scen = Scenario.load(args.scenario)
+        scen = _apply_supplier_experiment(scen, channel=channel, contain=contain)
+        arm = "defense" if contain else "attack"
+        run_id = f"{scen.id}_{channel}_{arm}"
+        jsonl_path = os.path.join(args.out, f"{run_id}.jsonl")
+        emitter = JsonlEmitter(jsonl_path)
+        emitter.manifest(make_manifest(run_id, scen, _dt.datetime.now().isoformat(timespec="seconds")))
+        ep = Episode(scen, run_id=run_id, emitter=emitter)
+        ep.run()
+        emitter.close()
+        print(f"  {run_id}: {ep.outcome()}  channel={channel} contain={contain}")
+    print(f"\n  supplier matrix done → {args.out}/")
     return 0
 
 

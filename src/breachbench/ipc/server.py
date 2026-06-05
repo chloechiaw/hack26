@@ -83,11 +83,13 @@ class HarnessState:
         db_path: Path,
         sim: "VendingSim",
         unix_socket: Path | None = None,
+        contain: bool = False,
     ) -> None:
         self.world_id = world_id
         self.db_path = db_path
         self.sim = sim
         self.unix_socket = unix_socket
+        self.contain = contain  # defense policy: harness-injected, not agent-chosen
 
     def load_events(self) -> list[dict[str, Any]]:
         from ..database.events import fetch_event_log_at_path
@@ -95,7 +97,10 @@ class HarnessState:
         return fetch_event_log_at_path(self.db_path, self.world_id)
 
     def call_tool(self, name: str, args: dict[str, Any]) -> dict[str, Any]:
-        tr = self.sim.call(name, args)
+        if name == "search_for_suppliers":
+            tr = self.sim.search_for_suppliers(args.get("query", ""), contain=self.contain)
+        else:
+            tr = self.sim.call(name, args)
         return {
             "ok": tr.ok,
             "summary": tr.summary,
