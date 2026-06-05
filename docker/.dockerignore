@@ -1,0 +1,10 @@
+.venv
+venv
+__pycache__
+.pytest_cache
+.git
+runs
+*.jsonl
+.env
+db/worlds
+.DS_Store

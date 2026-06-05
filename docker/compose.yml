@@ -1,0 +1,65 @@
+# OrbStack / Docker Compose — one world (production-like agent hardening)
+#
+#   ./docker/up.sh          # build + start harness + agent
+#   curl http://127.0.0.1:9000/health
+#   docker logs bb-agent-0
+#
+# Fleet (50 worlds) — run from host (recommended); UI group: breachbench-fleet
+#   ./docker/fleet-up.sh 50
+#   FLEET_PROJECT=my-fleet ./docker/fleet-up.sh 50   # custom OrbStack group name
+#
+# Or orchestrator container (must pass HOST_REPO):
+#   docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+#     -v "$(pwd)/db/worlds:/app/db/worlds" \
+#     -e HOST_REPO="$(pwd)" -e IPC_ROOT=/tmp/breachbench \
+#     breachbench/orchestrator -n 50
+
+name: breachbench
+
+services:
+  harness:
+    container_name: bb-harness-0
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.harness
+    image: breachbench/harness:latest
+    environment:
+      WORLD_ID: world_0
+      IPC_DIR: /ipc
+    volumes:
+      - ../db/worlds/world_0.db:/data/world.db:rw
+      - ipc-0:/ipc
+    ports:
+      - "127.0.0.1:9000:9000"
+    networks: [fleet]
+
+  agent:
+    container_name: bb-agent-0
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.agent
+    image: breachbench/agent:latest
+    depends_on: [harness]
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    volumes:
+      - ipc-0:/ipc:rw
+    environment:
+      IPC_SOCKET: /ipc/harness.sock
+      IPC_DIR: /ipc
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
+volumes:
+  ipc-0:
+
+networks:
+  fleet:

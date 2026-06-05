@@ -561,6 +561,116 @@ const KIND = {
 const HORIZON_DAYS = 30;     // simulated horizon per world
 const TOTAL_CLOCK = 1000;    // global clock resolution
 
+/* ---------- live event_log API (serve_dashboard.py) ---------- */
+const DEFAULT_API_PORT = 8765;
+
+/** Avoid file:///api/... — use the HTTP server. Override: ?api=http://127.0.0.1:8766 */
+function resolveApiBase() {
+  const params = new URLSearchParams(location.search);
+  if (params.has("api")) return params.get("api").replace(/\/$/, "");
+  if (location.protocol === "file:") {
+    const port = params.get("port") || DEFAULT_API_PORT;
+    return `http://127.0.0.1:${port}`;
+  }
+  if (location.protocol === "http:" || location.protocol === "https:") {
+    return `${location.protocol}//${location.host}`;
+  }
+  return `http://127.0.0.1:${DEFAULT_API_PORT}`;
+}
+
+const API_BASE = resolveApiBase();
+
+function apiUrl(path) {
+  const p = path.startsWith("/") ? path : `/${path}`;
+  return API_BASE ? `${API_BASE}${p}` : p;
+}
+
+function activeEvents(w) {
+  return w.displayEvents || w.events;
+}
+
+function rowToDashboardEvent(row) {
+  const day = +row.sim_day;
+  const body = row.email_body || "";
+  return {
+    s: row.step,
+    day,
+    time: row.timestamp || fmtDay(day),
+    kind: row.kind,
+    text: row.text || "",
+    from: row.email_from || null,
+    subj: row.email_subject || null,
+    body: body ? [body] : null,
+    action: row.tool || "",
+    inj: row.injection_compliance != null ? +row.injection_compliance : 0.05,
+    drift: row.goal_drift != null ? +row.goal_drift : 0.05,
+    delta: row.ledger_delta != null ? +row.ledger_delta : 0,
+    balance: row.balance_after != null ? +row.balance_after : 500,
+  };
+}
+
+function applyDbReplay(w, rows) {
+  const events = rows.map(rowToDashboardEvent).sort((a, b) => a.s - b.s);
+  w.displayEvents = events;
+  w.eventsSource = "sqlite";
+  const maxStep = Math.max(...events.map(e => e.s));
+  w.steps = maxStep + 1;
+  let ei = 0;
+  let bal = events[0].balance ?? 500;
+  let inj = events[0].inj ?? 0.05;
+  let drift = events[0].drift ?? 0.05;
+  const balSeries = [], injSeries = [], driftSeries = [];
+  for (let s = 0; s <= maxStep; s++) {
+    while (ei + 1 < events.length && events[ei + 1].s <= s) ei++;
+    if (events[ei].s <= s) {
+      bal = events[ei].balance;
+      inj = events[ei].inj;
+      drift = events[ei].drift;
+    }
+    balSeries.push(bal);
+    injSeries.push(inj);
+    driftSeries.push(drift);
+  }
+  w.balSeries = balSeries;
+  w.injSeries = injSeries;
+  w.driftSeries = driftSeries;
+  w.flags = { money: false, leak: false, melt: false };
+  events.forEach(e => {
+    if (e.kind === "breach") {
+      if (w.attack.breachKind === "leak") w.flags.leak = true;
+      else w.flags.money = true;
+    }
+    if (e.kind === "meltdown") w.flags.melt = true;
+  });
+  if (w.flags.money || w.flags.leak) w.status = "breached";
+  else if (w.flags.melt) w.status = "meltdown";
+}
+
+async function loadDbEvents(w, idx) {
+  const worldId = `world_${idx}`;
+  try {
+    const res = await fetch(apiUrl(`/api/worlds/${worldId}/events`));
+    if (!res.ok) return false;
+    const data = await res.json();
+    if (!data.events || !data.events.length) return false;
+    applyDbReplay(w, data.events);
+    return true;
+  } catch (err) {
+    console.warn("event_log fetch failed", err);
+    return false;
+  }
+}
+
+function eventAtStep(w, step) {
+  const events = activeEvents(w);
+  let best = events[0];
+  for (const e of events) {
+    if (e.s <= step) best = e;
+    else break;
+  }
+  return best;
+}
+
 /* ---------- world generation ---------- */
 function genWorld(i) {
   const r = rng(1000 + i * 7919);
@@ -919,21 +1029,34 @@ function tickLive() {
 /* ================= DRILL-DOWN DRAWER + REPLAY ================= */
 let cur = { w: null, step: 0, playing: false, speed: 1, timer: null };
 
-function openDrawer(idx) {
+async function openDrawer(idx) {
   const w = WORLDS[idx];
   cur.w = w;
-  // open at the moment of break if past it (so you land on the interesting frame), else at clock
-  const asof = worldAsOf(w, clock);
-  cur.step = Math.min(w.steps - 1, asof.cur);
+  w.displayEvents = null;
+  w.eventsSource = "mock";
   document.getElementById("overlay").classList.add("open");
+  document.getElementById("log-list").innerHTML =
+    '<div style="padding:12px;color:var(--txt-dim);font-family:var(--mono)">Loading event_log…</div>';
 
   document.getElementById("d-title").textContent = `${w.id} · ${w.scenario}`;
+
+  const dbOk = await loadDbEvents(w, idx);
+  const asof = worldAsOf(w, clock);
+  cur.step = dbOk
+    ? w.steps - 1
+    : Math.min(w.steps - 1, asof.cur);
+
+  const srcBadge = dbOk
+    ? `<span class="badge" style="color:var(--green);border-color:rgba(52,211,153,.35)">event_log · SQLite (${activeEvents(w).length} rows)</span>`
+    : `<span class="badge" style="color:var(--amber)">event_log · mock (${API_BASE} unreachable?)</span>`;
+
   document.getElementById("d-meta").innerHTML = `
     <span class="badge model">${w.model.label}</span>
     <span class="badge atk">${w.attack.label}</span>
     <span class="status-pill ${w.status}">${w.status}</span>
     <span class="badge">horizon ${HORIZON_DAYS}d · ${w.steps} steps</span>
-    <span class="badge">SQLite snapshot: ${w.id}.sqlite</span>
+    <span class="badge">db/worlds/world_${idx}.db</span>
+    ${srcBadge}
     ${w.ttb ? `<span class="badge" style="color:var(--red);border-color:rgba(255,93,108,.3)">TTB ${w.ttb.toFixed(1)}d</span>`:""}
   `;
   const rng = document.getElementById("r-range");
@@ -953,7 +1076,7 @@ document.getElementById("overlay").addEventListener("click", (e) => { if (e.targ
 function buildLog(w) {
   const list = document.getElementById("log-list");
   list.innerHTML = "";
-  w.events.forEach(e => {
+  activeEvents(w).forEach(e => {
     const k = KIND[e.kind] || KIND.tool;
     const row = document.createElement("div");
     row.className = "log-row";
@@ -1010,7 +1133,7 @@ function seekStep(step) {
   const w = cur.w; if (!w) return;
   step = Math.max(0, Math.min(w.steps - 1, step));
   cur.step = step;
-  const e = w.events[step];
+  const e = w.eventsSource === "sqlite" ? eventAtStep(w, step) : w.events[step];
 
   // controls
   document.getElementById("r-step").textContent = step;
@@ -1078,14 +1201,17 @@ function setBar(barId, valId, v, color) {
 }
 
 function lastAttackUpTo(w, step) {
-  for (let i = step; i >= 0; i--) {
-    const e = w.events[i];
-    if (e.from) return e;
+  const events = activeEvents(w);
+  let best = null;
+  for (const e of events) {
+    if (e.s > step) break;
+    if (e.from) best = e;
   }
-  return null;
+  return best;
 }
 function renderBody(parts) {
-  return parts.map(p => p.replace(/\[\[(.+?)\]\]/g, '<span class="inject">$1</span>')).join("");
+  const text = Array.isArray(parts) ? parts.join("") : String(parts || "");
+  return text.replace(/\[\[(.+?)\]\]/g, '<span class="inject">$1</span>');
 }
 
 /* replay transport */
