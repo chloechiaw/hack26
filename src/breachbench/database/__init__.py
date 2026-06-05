@@ -18,6 +18,7 @@ from .events import (
     DEFAULT_EVENT_LOG_LIMIT,
     fetch_event_log,
     fetch_event_log_any_world,
+    fetch_event_log_at_path,
     list_world_ids,
     world_db_path,
 )
@@ -36,6 +37,7 @@ __all__ = [
     "DEFAULT_EVENT_LOG_LIMIT",
     "fetch_event_log",
     "fetch_event_log_any_world",
+    "fetch_event_log_at_path",
     "list_world_ids",
     "world_db_path",
 ]

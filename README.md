@@ -83,7 +83,7 @@ breachbench/
 python -m pytest -q                  # contracts import, load, and cohere
 python -c "import breachbench as bb; print(bb.spec_summary())"
 python observability/serve_dashboard.py   # fleet wall + SQLite event_log API
-# → http://127.0.0.1:8765/  (drill-down loads db/worlds/world_N.db)
+./docker/up.sh                            # OrbStack/Docker: harness + hardened agent (IPC)
 ```
 
 Nothing here calls a model or a container yet — that's the next step. This is the

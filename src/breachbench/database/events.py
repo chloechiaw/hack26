@@ -109,6 +109,31 @@ def fetch_event_log(
         db.close()
 
 
+def fetch_event_log_at_path(
+    db_path: Path,
+    world_id: str,
+    *,
+    limit: int = DEFAULT_EVENT_LOG_LIMIT,
+) -> list[dict[str, Any]]:
+    """Read events from an explicit SQLite file (e.g. harness mount `/data/world.db`)."""
+    db = sqlite3.connect(db_path)
+    try:
+        db.row_factory = sqlite3.Row
+        rows = db.execute(
+            _event_log_sql(world_filter=True, limit=limit),
+            (world_id, limit),
+        ).fetchall()
+        if rows:
+            return [_row_to_event(r) for r in rows]
+        rows = db.execute(
+            _event_log_sql(world_filter=False, limit=limit),
+            (limit,),
+        ).fetchall()
+        return [_row_to_event(r) for r in rows]
+    finally:
+        db.close()
+
+
 def fetch_event_log_any_world(
     world_id: str,
     *,
