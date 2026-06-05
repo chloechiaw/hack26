@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 import urllib.error
 import urllib.request
 
@@ -24,11 +25,14 @@ OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 # (Claude 3.5 Haiku, o3-mini, GPT-4o) + Gemini 2.5 Pro as the modern stand-in for VB's
 # retired Gemini 1.5 Pro.
 MODELS: dict[str, str] = {
-    "opus-4.8":       "anthropic/claude-opus-4.8",    # NEW frontier model (not in VB paper)
-    "haiku-3.5":      "anthropic/claude-3.5-haiku",   # VB-paper model (available) — cheap adversary
-    "o3-mini":        "openai/o3-mini",               # VB-paper, 2nd best
-    "gpt-4o":         "openai/gpt-4o",                # VB-paper (weak performer)
-    "gemini-2.5-pro": "google/gemini-2.5-pro",        # substitute for VB's retired Gemini 1.5 Pro
+    "opus-4.8":         "anthropic/claude-opus-4.8",   # NEW frontier model (not in VB paper)
+    "sonnet-4.6":       "anthropic/claude-sonnet-4.6",  # frontier mid
+    "haiku-3.5":        "anthropic/claude-3.5-haiku",   # VB-paper model (available) — cheap adversary
+    "o3-mini":          "openai/o3-mini",               # VB-paper, 2nd best
+    "gpt-4o":           "openai/gpt-4o",                # VB-paper (weak performer)
+    "gpt-4o-mini":      "openai/gpt-4o-mini",           # fast/cheap
+    "gemini-2.5-pro":   "google/gemini-2.5-pro",        # substitute for VB's retired Gemini 1.5 Pro
+    "gemini-2.5-flash": "google/gemini-2.5-flash",      # fast/cheap + thinking traces
 }
 
 
@@ -78,18 +82,32 @@ def chat(model: str, messages: list[dict], *, tools: list[dict] | None = None,
     if reasoning:
         body["reasoning"] = {"effort": "low"}  # ask for thinking when the model supports it
 
-    req = urllib.request.Request(
-        OPENROUTER_URL, data=json.dumps(body).encode(),
-        headers={"Authorization": f"Bearer {get_key()}", "Content-Type": "application/json",
-                 "HTTP-Referer": "https://breachbench.local", "X-Title": "BreachBench"})
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            data = json.loads(r.read().decode())
-    except urllib.error.HTTPError as e:
-        detail = e.read().decode()[:400]
-        raise OpenRouterError(f"HTTP {e.code} for {resolve(model)}: {detail}") from None
-    except urllib.error.URLError as e:
-        raise OpenRouterError(f"network error for {resolve(model)}: {e.reason}") from None
+    payload = json.dumps(body).encode()
+    headers = {"Authorization": f"Bearer {get_key()}", "Content-Type": "application/json",
+               "HTTP-Referer": "https://breachbench.local", "X-Title": "BreachBench"}
+    # retry with backoff on rate-limit / transient errors (needed at 50-way concurrency)
+    last = None
+    for attempt in range(5):
+        try:
+            req = urllib.request.Request(OPENROUTER_URL, data=payload, headers=headers)
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                data = json.loads(r.read().decode())
+            break
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode()[:400]
+            last = OpenRouterError(f"HTTP {e.code} for {resolve(model)}: {detail}")
+            if e.code in (429, 500, 502, 503, 529) and attempt < 4:
+                time.sleep(min(2 ** attempt + 0.5 * attempt, 12))
+                continue
+            raise last from None
+        except (urllib.error.URLError, TimeoutError) as e:
+            last = OpenRouterError(f"network error for {resolve(model)}: {e}")
+            if attempt < 4:
+                time.sleep(min(2 ** attempt, 8))
+                continue
+            raise last from None
+    else:
+        raise last or OpenRouterError("exhausted retries")
 
     if "choices" not in data:
         raise OpenRouterError(f"unexpected response: {json.dumps(data)[:300]}")

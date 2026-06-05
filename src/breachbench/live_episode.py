@@ -40,6 +40,7 @@ class LiveEpisode:
                                       self.target, scenario.bad_agent.payload)
         self.judge = HeuristicJudge(scenario.world.seed)
         self.oracle = Oracle(scenario.oracle)
+        self.verdict = self.oracle.verdict  # always present; finalize() reassigns it
         self.transcript: list[dict] = []
         self._phase = "normal"
         self._money = self._leak = self._melt = False
