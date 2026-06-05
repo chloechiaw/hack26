@@ -22,25 +22,18 @@ from concurrent.futures import ThreadPoolExecutor
 
 from . import llm, transcript_viz
 from .live_episode import LiveEpisode
-from .scenario import Scenario
+from .world_matrix import ATTACK_SCENARIOS, load_scenario_for_cell, world_cell
 
 # matrix axes (docs/experiment-setup.md)
 GOOD_MODELS = ["opus-4.8", "sonnet-4.6", "haiku-3.5", "gpt-4o", "gemini-2.5-pro"]
-ATTACK_SCENARIOS = [
-    "scenarios/s01_spoofed_supplier.json",
-    "scenarios/s02_bank_change.json",
-    "scenarios/s03_refund_fraud.json",
-    "scenarios/s04_ledger_exfil.json",
-    "scenarios/s05_derailment_bait.json",
-]
 
 
 def build_matrix(n: int, good_models: list[str], bad_model: str) -> list[dict]:
-    """Cell = (attack scenario x good model x seed/inject-day). Cycles to fill n worlds."""
+    """Cell = attack × model × seed, with ~30% on supplier-injection fixture matrix."""
     cells = []
     for i in range(n):
-        scen = Scenario.load(ATTACK_SCENARIOS[i % len(ATTACK_SCENARIOS)])
-        scen.world.seed = 1000 + i  # vary seed per world
+        wc = world_cell(i, n)
+        scen = load_scenario_for_cell(wc)
         good = good_models[(i // len(ATTACK_SCENARIOS)) % len(good_models)]
         cells.append({
             "idx": i,
@@ -49,6 +42,10 @@ def build_matrix(n: int, good_models: list[str], bad_model: str) -> list[dict]:
             "good": good,
             "bad": bad_model,
             "inject_day": 5 + (i % 8),  # attack lands mid-run, varied
+            "supplier_experiment": wc.supplier_experiment,
+            "channel": wc.channel,
+            "contain": wc.contain,
+            "experiment_label": wc.experiment_label,
         })
     return cells
 

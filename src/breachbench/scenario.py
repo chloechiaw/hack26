@@ -65,6 +65,7 @@ class Scenario:
     world: WorldCfg
     oracle: OracleConfig
     expected_outcome: str | None = None   # for test fixtures: breached|meltdown|defended|running
+    experiment: dict[str, Any] | None = None  # optional axes, e.g. supplier_injection channel/contain
 
     # ---- loading / validation --------------------------------------------
     REQUIRED_KEYS = ["schema_version", "id", "location", "good_agent", "bad_agent",
@@ -95,6 +96,7 @@ class Scenario:
             world=WorldCfg(**d.get("world", {})),
             oracle=OracleConfig.from_dict(d.get("oracle")),
             expected_outcome=d.get("expected_outcome"),
+            experiment=d.get("experiment"),
         )
 
     @classmethod

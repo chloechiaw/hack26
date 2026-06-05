@@ -14,6 +14,7 @@ from breachbench.database.events import fetch_event_log_at_path
 from breachbench.ipc.server import HarnessState, make_handler_class, serve_tcp, serve_unix
 from breachbench.scenario import Scenario
 from breachbench.sim.vending_sim import VendingSim
+from breachbench.world_matrix import apply_experiment_from_env
 
 ROOT = Path(__file__).resolve().parents[2]
 SEED_SQL = ROOT / "db" / "coffeeshop_seed.sql"
@@ -56,13 +57,16 @@ def main(argv: list[str] | None = None) -> int:
     args.ipc_dir.mkdir(parents=True, exist_ok=True)
     unix_path = args.ipc_dir / UNIX_SOCK_NAME
 
-    scen = load_scenario(args.scenario)
+    scen = apply_experiment_from_env(load_scenario(args.scenario))
     sim = VendingSim(scen)
+    exp = scen.experiment or {}
+    contain = bool(exp.get("contain", False))
     state = HarnessState(
         world_id=args.world_id,
         db_path=args.db,
         sim=sim,
         unix_socket=unix_path,
+        contain=contain,
     )
     handler = make_handler_class(state)
     n_events = len(fetch_event_log_at_path(args.db, args.world_id))
@@ -71,8 +75,12 @@ def main(argv: list[str] | None = None) -> int:
     unix = serve_unix(unix_path, handler)
     os.chmod(unix_path, 0o666)
 
-    print(f"harness ready  world_id={args.world_id}  db={args.db}  seed_events={n_events}")
-    print(f"  tcp   0.0.0.0:{args.port}  GET /health /events  POST /tool")
+    exp_label = exp.get("mode", "legacy")
+    if exp.get("mode") == "supplier_injection":
+        exp_label = f"supplier_injection channel={exp.get('channel')} contain={contain}"
+    print(f"harness ready  world_id={args.world_id}  db={args.db}  seed_events={n_events}  experiment={exp_label}")
+    print(f"  tcp   0.0.0.0:{args.port}  GET /health /events /audit  POST /tool")
+    print(f"  security  minimize+mask | egress screen | payment lock | audit log")
     print(f"  unix  {unix_path}  (agent IPC, --network none)")
 
     threading.Thread(target=tcp.serve_forever, daemon=True, name="harness-tcp").start()

@@ -13,6 +13,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from breachbench.world_matrix import count_experiment_worlds, harness_env_for_cell, world_cell
+
 ROOT = Path(__file__).resolve().parents[2]
 GENERATE_WORLDS = ROOT / "db" / "scripts" / "generate_worlds.py"
 IPC_SOCK = "/ipc/harness.sock"
@@ -92,20 +94,28 @@ def spin_world(
 
     run(["docker", "rm", "-f", harness_name, agent_name], check=False)
 
-    run([
+    cell = world_cell(i)
+    harness_env = harness_env_for_cell(cell)
+    harness_run = [
         "docker", "run", "-d",
         "--name", harness_name,
         *_fleet_labels(project, i, "harness"),
+        "--label", f"breachbench.experiment={cell.experiment_label}",
         "--network", network,
         "-p", f"127.0.0.1:{port}:9000",
         "-v", f"{db_host.resolve()}:/data/world.db:rw",
         "-v", f"{ipc.resolve()}:/ipc:rw",
-        "-e", f"WORLD_ID={world_id}",
         "-e", "IPC_DIR=/ipc",
+    ]
+    for key, value in harness_env.items():
+        harness_run.extend(["-e", f"{key}={value}"])
+    harness_run.extend([
         harness_image,
         "--world-id", world_id,
         "--ipc-dir", "/ipc",
+        "--scenario", f"/app/{cell.scenario_path}",
     ])
+    run(harness_run)
 
     # Agent: hardened, no network — IPC via shared unix socket only
     agent_cmd = [
@@ -184,6 +194,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"host worlds_dir={worlds_dir}")
     print(f"host ipc_root={ipc_root}")
     print(f"compose project={args.project}  (OrbStack/Docker UI group)")
+    n_exp = count_experiment_worlds(args.worlds)
+    print(f"world matrix: {n_exp} supplier-injection experiment / {args.worlds - n_exp} legacy")
 
     for i in range(args.worlds):
         spin_world(

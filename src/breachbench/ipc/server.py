@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import unquote
 
 if TYPE_CHECKING:
+    from ..harness.security import HarnessSecurity
     from ..sim.vending_sim import VendingSim
 
 
@@ -55,6 +56,11 @@ def make_handler_class(state: "HarnessState") -> type[BaseHTTPRequestHandler]:
                     "world_id": state.world_id,
                     "events": state.load_events(),
                 })
+            if path == "/audit":
+                return self._send_json(200, {
+                    "world_id": state.world_id,
+                    "audit": state.audit_snapshot(),
+                })
             self.send_error(404)
 
         def do_POST(self) -> None:
@@ -83,11 +89,23 @@ class HarnessState:
         db_path: Path,
         sim: "VendingSim",
         unix_socket: Path | None = None,
+        contain: bool = False,
+        gateway: "HarnessSecurity | None" = None,
     ) -> None:
         self.world_id = world_id
         self.db_path = db_path
         self.sim = sim
         self.unix_socket = unix_socket
+        self.contain = contain  # experiment: False = show supplier description (attack arm)
+        if gateway is None:
+            from ..harness.security import HarnessSecurity, SecurityConfig
+
+            gateway = HarnessSecurity(
+                sim,
+                world_id=world_id,
+                config=SecurityConfig(allow_raw_supplier_text=not contain),
+            )
+        self._gateway = gateway
 
     def load_events(self) -> list[dict[str, Any]]:
         from ..database.events import fetch_event_log_at_path
@@ -95,13 +113,10 @@ class HarnessState:
         return fetch_event_log_at_path(self.db_path, self.world_id)
 
     def call_tool(self, name: str, args: dict[str, Any]) -> dict[str, Any]:
-        tr = self.sim.call(name, args)
-        return {
-            "ok": tr.ok,
-            "summary": tr.summary,
-            "data": tr.data,
-            "ledger_delta": tr.ledger_delta,
-        }
+        return self._gateway.call_tool(name, args)
+
+    def audit_snapshot(self) -> list[dict[str, Any]]:
+        return self._gateway.audit_snapshot()
 
 
 def serve_tcp(port: int, handler: type[BaseHTTPRequestHandler]) -> ThreadingHTTPServer:
