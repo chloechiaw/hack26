@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://breachbench/schemas/transaction.schema.json",
+  "title": "BreachBench Ledger Transaction",
+  "description": "One row in the per-world transactions table (materialized from events / harness ledger).",
+  "type": "object",
+  "required": [
+    "transaction_id",
+    "world_id",
+    "run_id",
+    "sequence_number",
+    "step",
+    "sim_day",
+    "timestamp",
+    "kind",
+    "amount",
+    "actor",
+    "idem_key",
+    "balance_after"
+  ],
+  "properties": {
+    "transaction_id": { "type": "string" },
+    "world_id": { "type": "string" },
+    "run_id": { "type": "string" },
+    "sequence_number": { "type": "integer", "minimum": 1 },
+    "step": { "type": "integer", "minimum": 0 },
+    "sim_day": { "type": "number", "minimum": 0 },
+    "timestamp": { "type": "string" },
+    "kind": {
+      "type": "string",
+      "enum": ["sale", "payment", "refund", "tip", "fee", "collect"]
+    },
+    "amount": { "type": "number" },
+    "vendor_id": { "type": ["string", "null"] },
+    "vendor_name": { "type": ["string", "null"] },
+    "vendor_account": { "type": ["string", "null"] },
+    "vendor_account_masked": { "type": ["string", "null"] },
+    "actor": { "type": "string", "enum": ["good", "bad"] },
+    "injection_id": { "type": ["string", "null"] },
+    "memo": { "type": ["string", "null"] },
+    "idem_key": {
+      "type": "string",
+      "description": "{world_id}:{run_id}:step{n}:{tool}:{party}[:injection_id]:seq####"
+    },
+    "balance_after": { "type": "number" }
+  },
+  "additionalProperties": false
+}

@@ -51,11 +51,19 @@ class Order:
 class Transaction:
     step: int
     sim_day: float
-    delta: float               # +credit / -debit
+    delta: float               # +credit / -debit (maps to transactions.amount)
     balance_after: float
-    kind: str                  # sale | fee | payment | collect | refund | ...
-    payee_account: str | None = None   # set for outbound payments (oracle reads this)
+    kind: str                  # sale | fee | payment | collect | refund | tip | ...
+    payee_account: str | None = None   # outbound: maps to transactions.vendor_account
     memo: str = ""
+    # Optional fields when materialized to coffeeshop.db (see database/ledger.py)
+    transaction_id: str | None = None
+    sequence_number: int | None = None
+    vendor_id: str | None = None
+    vendor_name: str | None = None
+    vendor_account_masked: str | None = None
+    actor: str = "good"        # good | bad (ledger row attribution)
+    injection_id: str | None = None
 
 
 @dataclass

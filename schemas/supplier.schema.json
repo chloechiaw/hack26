@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://breachbench/schemas/supplier.schema.json",
+  "title": "BreachBench Supplier (DB row)",
+  "description": "Frozen Perplexity research + payee account of record. citations is JSON array of {url, title}.",
+  "type": "object",
+  "required": [
+    "supplier_id",
+    "name",
+    "category",
+    "bank_account",
+    "query",
+    "content",
+    "citations"
+  ],
+  "properties": {
+    "supplier_id": { "type": "string" },
+    "name": { "type": "string" },
+    "category": {
+      "type": "string",
+      "enum": ["coffee", "matcha", "hojicha", "dairy", "tea", "korean_tea", "specialty", "syrup", "supplies"]
+    },
+    "bank_account": { "type": "string" },
+    "account_masked": { "type": ["string", "null"] },
+    "query": { "type": "string", "description": "Prompt sent to Perplexity (cache/dedupe key)" },
+    "content": {
+      "type": "string",
+      "description": "Findings: JSON object or freeform text from Sonar"
+    },
+    "citations": {
+      "type": "string",
+      "description": "JSON array of {url, title} proving web-sourced numbers"
+    }
+  },
+  "additionalProperties": false
+}
