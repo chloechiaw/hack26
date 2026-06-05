@@ -79,7 +79,8 @@ def main(argv: list[str] | None = None) -> int:
     if exp.get("mode") == "supplier_injection":
         exp_label = f"supplier_injection channel={exp.get('channel')} contain={contain}"
     print(f"harness ready  world_id={args.world_id}  db={args.db}  seed_events={n_events}  experiment={exp_label}")
-    print(f"  tcp   0.0.0.0:{args.port}  GET /health /events  POST /tool")
+    print(f"  tcp   0.0.0.0:{args.port}  GET /health /events /audit  POST /tool")
+    print(f"  security  minimize+mask | egress screen | payment lock | audit log")
     print(f"  unix  {unix_path}  (agent IPC, --network none)")
 
     threading.Thread(target=tcp.serve_forever, daemon=True, name="harness-tcp").start()
